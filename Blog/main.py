@@ -14,8 +14,8 @@ from credentials import MY_EMAIL, MY_PASSWORD, SECRET_KEY
 import requests
 import bleach
 
-MY_EMAIL= MY_EMAIL
-MY_PASSWORD= MY_PASSWORD
+MY_EMAIL = MY_EMAIL
+MY_PASSWORD = MY_PASSWORD
 SECRET_KEY = SECRET_KEY
 
 app = Flask(__name__)
@@ -47,18 +47,33 @@ class User(UserMixin, db.Model):
 class BlogPost(db.Model):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     title: Mapped[str] = mapped_column(String(250), unique=True, nullable=False)
-    subtitle: Mapped[str] = mapped_column(String(250), nullable=False)
+    subtitle: Mapped[str] = mapped_column(String(250), nullable=True)
     date: Mapped[str] = mapped_column(String(250), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     author: Mapped[str] = mapped_column(String(250), nullable=False)
-    img_url: Mapped[str] = mapped_column(String(250), nullable=False)
+    img_url: Mapped[str] = mapped_column(String(250), nullable=True)
+
+
+class CommentSection(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    post_id = db.Column(db.Integer, db.ForeignKey('blog_post.id'), nullable=False)
+    author = db.Column(db.String(250), nullable=True)
+    body = db.Column(db.Text, nullable=False)
+    date = db.Column(db.String(250), nullable=False)
+
+
+class CommentForm(FlaskForm):
+    author = StringField("Your Name")
+    body = StringField("Comment", validators=[DataRequired()])
+    submit = SubmitField("Add Comment")
+
 
 
 class CreatePostForm(FlaskForm):
     title = StringField("Blog Post Title", validators=[DataRequired()])
-    subtitle = StringField("Subtitle", validators=[DataRequired()])
+    subtitle = StringField("Subtitle")
     author = StringField("Your Name", validators=[DataRequired()])
-    img_url = StringField("Blog Image URL", validators=[DataRequired(), URL()])
+    img_url = StringField("Blog Image URL")
     body = CKEditorField("Blog Content", validators=[DataRequired()])
     submit = SubmitField("Submit Post")
 
@@ -76,7 +91,7 @@ class LoginForm(FlaskForm):
 with app.app_context():
     db.create_all()
     if not User.query.filter_by(email=MY_EMAIL).first():
-        new_user = User(id=1, email = MY_EMAIL, password = MY_PASSWORD)
+        new_user = User(id=1, email=MY_EMAIL, password=MY_PASSWORD)
         db.session.add(new_user)
         db.session.commit()
 
@@ -88,7 +103,7 @@ def login():
         if form.email.data == MY_EMAIL and form.password.data == MY_PASSWORD:
             user = User.query.filter_by(email=MY_EMAIL).first()
             if not user:
-                user = User(id=1, email = MY_EMAIL, password = MY_PASSWORD)
+                user = User(id=1, email=MY_EMAIL, password=MY_PASSWORD)
                 db.session.add(user)
                 db.session.commit()
             login_user(user)
@@ -97,16 +112,18 @@ def login():
             flash('Login Unsuccessful. Please check email and password', 'danger')
     return render_template('login.html', form=form)
 
+
 @login_manager.user_loader
 def load_user(user_id):
     if user_id and user_id.isdigit():
         return User.query.get(int(user_id))
     return None
 
+
 @app.route("/new-post", methods=["GET", "POST"])
 @login_required
 def add_new_post():
-    form = CreatePostForm(author= "Kyle Porter")
+    form = CreatePostForm(author="Kyle Porter")
     if form.validate_on_submit():
         new_post = BlogPost(
             title=form.title.data,
@@ -173,19 +190,55 @@ def contact():
     return render_template("contact.html")
 
 
-@app.route("/post/<int:post_id>")
+@app.route("/post/<int:post_id>", methods=["GET", "POST"])
 def show_post(post_id):
+    post = db.get_or_404(BlogPost, post_id)
+    form = CommentForm()
+    if form.validate_on_submit():
+        new_comment = CommentSection(
+            post_id=post_id,
+            author=form.author.data if form.author.data else 'Anonymous',
+            body=form.body.data,
+            date=date.today().strftime("%B %d, %Y")
+
+        )
+        db.session.add(new_comment)
+        db.session.commit()
+        return redirect(url_for('show_post', post_id=post_id))
+    comments = CommentSection.query.filter_by(post_id=post_id).order_by(CommentSection.date.desc()).all()
+
     # Retrieve a BlogPost from the database based on the post_id
-    requested_post = db.get_or_404(BlogPost, post_id)
-    return render_template("post.html", post=requested_post)
+    return render_template("post.html", post=post, form=form, comments=comments)
+
 
 @app.route("/delete/<post_id>")
 @login_required
 def delete_post(post_id):
-    post_to_delete = db.get_or_404(BlogPost,post_id)
+    post_to_delete = db.get_or_404(BlogPost, post_id)
     db.session.delete(post_to_delete)
     db.session.commit()
     return redirect(url_for('get_all_posts'))
+
+@app.route("/delete-comment/<comment_id>", methods=["POST"])
+@login_required
+def delete_comment(comment_id):
+    comment= db.get_or_404(CommentSection, comment_id)
+    db.session.delete(comment)
+    db.session.commit()
+    flash("Comment deleted successfully", "success")
+    return redirect(url_for('show_post', post_id=comment.post_id))
+
+@app.route("/form-entry", methods= ["POST"])
+def receive_data():
+    data= request.form
+    print(data.get("name", "Name not provided"))
+    print(data.get("email", "Email not provided"))
+    print(data.get("phone", "Phone not provided"))
+    print(data.get("message", "Message not provided"))
+    return "<h1>Successfully sent your message</h1>"
+
+
+
 
 
 if __name__ == "__main__":

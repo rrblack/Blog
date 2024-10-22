@@ -16,7 +16,7 @@
 
         <!-- Main Content-->
         {% if current_user.is_authenticated %}
-        <div class="d-flex justify-content-end mb-4">
+        <div class="d-flex justify-content-center">
             <a class="btn btn-primary rounded-pill" href="{{ url_for('add_new_post') }}">Create New Post</a>
         </div>
         {% endif %}
