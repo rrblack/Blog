@@ -10,7 +10,6 @@ from wtforms.validators import DataRequired, URL
 from flask_ckeditor import CKEditor, CKEditorField
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user
 from datetime import date
-from credentials import MY_EMAIL, MY_PASSWORD
 
 SECRET_KEY = os.environ.get('SECRET_KEY', 'default_secret_key')
 
@@ -74,10 +73,7 @@ class LoginForm(FlaskForm):
 
 with app.app_context():
     db.create_all()
-    if not User.query.filter_by(email=MY_EMAIL).first():
-        new_user = User(id=1, email=MY_EMAIL, password=MY_PASSWORD)
-        db.session.add(new_user)
-        db.session.commit()
+    db.session.commit()
 
 
 @login_manager.user_loader
@@ -121,7 +117,7 @@ def add_new_post():
 @login_required
 def logout():
     logout_user()
-    return
+    return redirect(url_for('get_all_posts'))
 
 
 @app.route('/index.html')
