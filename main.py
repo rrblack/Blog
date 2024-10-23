@@ -2,7 +2,6 @@ import os
 from flask import Flask, render_template, redirect, url_for, request, flash
 from flask_bootstrap import Bootstrap5
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy import Integer, String, Text
 from flask_wtf import FlaskForm
 from wtforms import StringField, SubmitField
@@ -12,17 +11,14 @@ from flask_ckeditor import CKEditor, CKEditorField
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user
 from datetime import date
 from credentials import MY_EMAIL, MY_PASSWORD, SECRET_KEY
-import requests
-import bleach
-
-MY_EMAIL = MY_EMAIL
-MY_PASSWORD = MY_PASSWORD
-SECRET_KEY = SECRET_KEY
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = SECRET_KEY
+app.config['SECRET_KEY'] = os.environ.get('FLASK_KEY', 'default_secret_key')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DB_URI", "sqlite:///posts.db")
+
 Bootstrap5(app)
 ckeditor = CKEditor(app)
+db = SQLAlchemy(app)
 
 # Initialize Login Manager
 login_manager = LoginManager()
@@ -30,15 +26,6 @@ login_manager.init_app(app)
 
 
 # CREATE DATABASE
-class Base(DeclarativeBase):
-    pass
-
-
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DB_URI", "sqlite:///posts.db")
-db = SQLAlchemy()
-db.init_app(app)
-
-
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(150), unique=True, nullable=False)
@@ -46,13 +33,13 @@ class User(UserMixin, db.Model):
 
 
 class BlogPost(db.Model):
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    title: Mapped[str] = mapped_column(String(250), unique=True, nullable=False)
-    subtitle: Mapped[str] = mapped_column(String(250), nullable=True)
-    date: Mapped[str] = mapped_column(String(250), nullable=False)
-    body: Mapped[str] = mapped_column(Text, nullable=False)
-    author: Mapped[str] = mapped_column(String(250), nullable=False)
-    img_url: Mapped[str] = mapped_column(String(250), nullable=True)
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(250), unique=True, nullable=False)
+    subtitle = db.Column(db.String(250), nullable=True)
+    date = db.Column(db.String(250), nullable=False)
+    body = db.Column(db.Text, nullable=False)
+    author = db.Column(db.String(250), nullable=False)
+    img_url = db.Column(db.String(250), nullable=True)
 
 
 class CommentSection(db.Model):
@@ -69,7 +56,6 @@ class CommentForm(FlaskForm):
     submit = SubmitField("Add Comment")
 
 
-
 class CreatePostForm(FlaskForm):
     title = StringField("Blog Post Title", validators=[DataRequired()])
     subtitle = StringField("Subtitle")
@@ -79,10 +65,6 @@ class CreatePostForm(FlaskForm):
     submit = SubmitField("Submit Post")
 
 
-# User Loader
-
-
-# Login Form
 class LoginForm(FlaskForm):
     email = StringField('Email', validators=[DataRequired()])
     password = PasswordField('Password', validators=[DataRequired()])
@@ -97,16 +79,17 @@ with app.app_context():
         db.session.commit()
 
 
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     form = LoginForm()
     if form.validate_on_submit():
-        if form.email.data == MY_EMAIL and form.password.data == MY_PASSWORD:
-            user = User.query.filter_by(email=MY_EMAIL).first()
-            if not user:
-                user = User(id=1, email=MY_EMAIL, password=MY_PASSWORD)
-                db.session.add(user)
-                db.session.commit()
+        user = User.query.filter_by(email=form.email.data).first()
+        if user and user.password == form.password.data:
             login_user(user)
             return redirect(url_for('get_all_posts'))
         else:
@@ -114,17 +97,10 @@ def login():
     return render_template('login.html', form=form)
 
 
-@login_manager.user_loader
-def load_user(user_id):
-    if user_id and user_id.isdigit():
-        return User.query.get(int(user_id))
-    return None
-
-
 @app.route("/new-post", methods=["GET", "POST"])
 @login_required
 def add_new_post():
-    form = CreatePostForm(author="Kyle Porter")
+    form = CreatePostForm()
     if form.validate_on_submit():
         new_post = BlogPost(
             title=form.title.data,
@@ -144,7 +120,7 @@ def add_new_post():
 @login_required
 def logout():
     logout_user()
-    return redirect(url_for('get_all_posts'))
+    return
 
 
 @app.route('/index.html')
@@ -220,26 +196,25 @@ def delete_post(post_id):
     db.session.commit()
     return redirect(url_for('get_all_posts'))
 
+
 @app.route("/delete-comment/<comment_id>", methods=["POST"])
 @login_required
 def delete_comment(comment_id):
-    comment= db.get_or_404(CommentSection, comment_id)
+    comment = db.get_or_404(CommentSection, comment_id)
     db.session.delete(comment)
     db.session.commit()
     flash("Comment deleted successfully", "success")
     return redirect(url_for('show_post', post_id=comment.post_id))
 
-@app.route("/form-entry", methods= ["POST"])
+
+@app.route("/form-entry", methods=["POST"])
 def receive_data():
-    data= request.form
+    data = request.form
     print(data.get("name", "Name not provided"))
     print(data.get("email", "Email not provided"))
     print(data.get("phone", "Phone not provided"))
     print(data.get("message", "Message not provided"))
     return "<h1>Successfully sent your message</h1>"
-
-
-
 
 
 if __name__ == "__main__":
