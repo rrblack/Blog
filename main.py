@@ -10,12 +10,13 @@ from wtforms.validators import DataRequired, URL
 from flask_ckeditor import CKEditor, CKEditorField
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user
 from datetime import date
-from credentials import MY_EMAIL, MY_PASSWORD, SECRET_KEY
+from credentials import MY_EMAIL, MY_PASSWORD
+
+SECRET_KEY = os.environ.get('SECRET_KEY', 'default_secret_key')
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('FLASK_KEY', 'default_secret_key')
+app.config['SECRET_KEY'] = SECRET_KEY
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DB_URI", "sqlite:///posts.db")
-
 Bootstrap5(app)
 ckeditor = CKEditor(app)
 db = SQLAlchemy(app)
